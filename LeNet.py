@@ -4,9 +4,29 @@ from tensorflow.contrib.layers import flatten
 from sklearn.utils import shuffle
 
 class LeNetParams(object):
-    def __init__(self, input_dim, num_classes, mu=0, sigma=0.1):
+    def __init__(self, input_dim, num_classes,
+                 conv1_num_filters=6,  conv1_filter_size=5, conv1_stride=1,
+                 pool1_size=2, pool1_stride=2,
+                 conv2_num_filters=16, conv2_filter_size=5, conv2_stride=1,
+                 pool2_size=2, pool2_stride=2,
+                 fc1_depth=120, fc2_depth=84,
+                 mu=0, sigma=0.1):
         self.W, self.H, self.C = input_dim
         self.num_classes = num_classes
+
+        self.conv1_num_filters = conv1_num_filters
+        self.conv1_filter_size = conv1_filter_size
+        self.conv1_stride = conv1_stride
+        self.pool1_size = pool1_size
+        self.pool1_stride = pool1_stride
+        self.conv2_num_filters = conv2_num_filters
+        self.conv2_filter_size = conv2_filter_size
+        self.conv2_stride = conv2_stride
+        self.pool2_size = pool2_size
+        self.pool2_stride = pool2_stride
+        self.fc1_depth = fc1_depth
+        self.fc2_depth = fc2_depth
+
         self.mu = mu
         self.sigma = sigma
 
@@ -19,27 +39,33 @@ class LeNetModel(object):
             mu = net_params.mu
             sigma = net_params.sigma
 
+            conv1_out_w, conv1_out_h = self.calc_conv_out_size(net_params.W, net_params.H, net_params.conv1_filter_size, net_params.conv1_stride)
+            pool1_out_w, pool1_out_h = self.calc_pool_out_size(conv1_out_w, conv1_out_h, net_params.pool1_size, net_params.pool1_size, net_params.pool2_stride)
+
+            conv2_out_w, conv2_out_h = self.calc_conv_out_size(pool1_out_w, pool1_out_h, net_params.conv2_filter_size, net_params.conv2_stride)
+            pool2_out_w, pool2_out_h = self.calc_pool_out_size(conv2_out_w, conv2_out_h, net_params.pool2_size, net_params.pool2_size, net_params.pool2_stride)
+
             weights = 5 * [None]
             biases = 5 * [None]
 
             # Layer 1: Convolutional. Input = 32x32x1. Output = 28x28x6.
-            weights[0] = self.weight_variable(shape=(5, 5, net_params.C, 6), mean=mu, stddev=sigma)#tf.Variable(tf.truncated_normal(shape=(5, 5, n_channels, 6), mean=mu, stddev=sigma))
-            biases[0] = self.bias_variable((6))#, default_value=0)#tf.Variable(tf.zeros(6))
+            weights[0] = self.weight_variable(shape=(net_params.conv1_filter_size, net_params.conv1_filter_size, net_params.C, net_params.conv1_num_filters), mean=mu, stddev=sigma)
+            biases[0] = self.bias_variable((net_params.conv1_num_filters))
 
             # Layer 2: Convolutional. Output = 10x10x16.
-            weights[1] = self.weight_variable(shape=(5, 5, 6, 16), mean=mu, stddev=sigma)#tf.Variable(tf.truncated_normal(shape=(5, 5, 6, 16), mean=mu, stddev=sigma))
-            biases[1] = self.bias_variable((16))#, default_value=0)#tf.Variable(tf.zeros(16))
+            weights[1] = self.weight_variable(shape=(net_params.conv2_filter_size, net_params.conv2_filter_size, net_params.conv1_num_filters, net_params.conv2_num_filters), mean=mu, stddev=sigma)
+            biases[1] = self.bias_variable((net_params.conv2_num_filters))
 
             # Layer 3: Fully Connected. Input = 400. Output = 120.
-            weights[2] = self.weight_variable(shape=(400, 120), mean=mu, stddev=sigma)#tf.Variable(tf.truncated_normal(shape=(400, 120), mean=mu, stddev=sigma))
-            biases[2] = self.bias_variable((120))#, default_value=0)#tf.Variable(tf.zeros(120))
+            weights[2] = self.weight_variable(shape=(pool2_out_w * pool2_out_h * net_params.conv2_num_filters, net_params.fc1_depth), mean=mu, stddev=sigma)
+            biases[2] = self.bias_variable((net_params.fc1_depth))
 
             # Layer 4: Fully Connected. Input = 120. Output = 84.
-            weights[3] = self.weight_variable(shape=(120, 84), mean=mu, stddev=sigma)#tf.Variable(tf.truncated_normal(shape=(120, 84), mean=mu, stddev=sigma))
-            biases[3] = self.bias_variable((84))#, default_value=0)#tf.Variable(tf.zeros(84))
+            weights[3] = self.weight_variable(shape=(net_params.fc1_depth, net_params.fc2_depth), mean=mu, stddev=sigma)
+            biases[3] = self.bias_variable((net_params.fc2_depth))
 
             # Layer 5: Fully Connected. Input = 84. Output = n_classes.
-            weights[4] = self.weight_variable(shape=(84, net_params.num_classes), mean=mu, stddev=sigma)#tf.Variable(tf.truncated_normal(shape=(84, n_classes), mean=mu, stddev=sigma))
+            weights[4] = self.weight_variable(shape=(net_params.fc2_depth, net_params.num_classes), mean=mu, stddev=sigma)#tf.Variable(tf.truncated_normal(shape=(84, n_classes), mean=mu, stddev=sigma))
             biases[4] = self.bias_variable((net_params.num_classes))#, default_value=0)#tf.Variable(tf.zeros(n_classes))
 
             self.weights = weights
@@ -47,6 +73,18 @@ class LeNetModel(object):
         else:
             self.weights = None
             self.biases = None
+
+    def calc_conv_out_size(self, input_w, input_h, filter_size, conv_stride):
+        pad = 0#(filter_size - 1) / 2
+        out_w = 1 + (input_w + 2 * pad - filter_size) / conv_stride
+        out_h = 1 + (input_h + 2 * pad - filter_size) / conv_stride
+        return (int(out_w), int(out_h))
+
+    def calc_pool_out_size(self, input_w, input_h, pool_w, pool_h, pool_stride):
+        out_w = (input_w - pool_w) / pool_stride + 1
+        out_h = (input_h - pool_h) / pool_stride + 1
+        return (int(out_w), int(out_h))
+
 
     def weight_variable(self, shape, mean=0, stddev=0.1):
         # return tf.Variable(tf.truncated_normal(shape, stddev=stddev))
@@ -83,14 +121,14 @@ class LeNet(object):
 
     def build_LeNet(self):
         # Layer 1
-        conv1 = tf.nn.conv2d(self.x, self.weights[0], strides=[1, 1, 1, 1], padding='VALID') + self.biases[0]
+        conv1 = tf.nn.conv2d(self.x, self.weights[0], strides=[1, self.net_params.conv1_stride, self.net_params.conv1_stride, 1], padding='VALID') + self.biases[0]
         conv1 = tf.nn.relu(conv1)
-        conv1 = tf.nn.max_pool(conv1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='VALID')
+        conv1 = tf.nn.max_pool(conv1, ksize=[1, self.net_params.pool1_size, self.net_params.pool1_size, 1], strides=[1, self.net_params.pool1_stride, self.net_params.pool1_stride, 1], padding='VALID')
 
         # Layer 2
-        conv2 = tf.nn.conv2d(conv1, self.weights[1], strides=[1, 1, 1, 1], padding='VALID') + self.biases[1]
+        conv2 = tf.nn.conv2d(conv1, self.weights[1], strides=[1, self.net_params.conv2_stride, self.net_params.conv2_stride, 1], padding='VALID') + self.biases[1]
         conv2 = tf.nn.relu(conv2)
-        conv2 = tf.nn.max_pool(conv2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='VALID')
+        conv2 = tf.nn.max_pool(conv2, ksize=[1, self.net_params.pool2_size, self.net_params.pool2_size, 1], strides=[1, self.net_params.pool2_stride, self.net_params.pool2_stride, 1], padding='VALID')
 
         # Flatten
         fc0 = flatten(conv2)
@@ -144,6 +182,16 @@ class LeNet(object):
         model.weights = [w.eval() for w in self.weights]
         model.biases = [b.eval() for b in self.biases]
 
+    def evaluate(self, session, X_data, y_data, batch_size):
+        num_examples = len(X_data)
+        total_accuracy = 0
+        #session = tf.get_default_session()
+        for offset in range(0, num_examples, batch_size):
+            batch_x, batch_y = X_data[offset:offset + batch_size], y_data[offset:offset + batch_size]
+            accuracy = session.run(self.accuracy, feed_dict={self.x: batch_x, self.y: batch_y, self.dropout: 1.0})
+            total_accuracy += (accuracy * len(batch_x))
+        return total_accuracy / num_examples
+
 
 
 class LeNetSolver(object):
@@ -186,8 +234,8 @@ class LeNetSolver(object):
 
                     _, loss_val = session.run([self.leNet.optimizer, self.leNet.loss], feed_dict=feed_dict)
 
-                train_accuracy = self.evaluate(session, X_train, y_train)
-                valid_accuracy = self.evaluate(session, self.valid_dataset, self.valid_labels)
+                train_accuracy = self.leNet.evaluate(session, X_train, y_train, self.batch_size)
+                valid_accuracy = self.leNet.evaluate(session, self.valid_dataset, self.valid_labels, self.batch_size)
 
                 #loss_val = self.leNet.loss.eval(feed_dict={self.leNet.x: X_train, self.leNet.y: y_train})
                 #train_accuracy = self.leNet.accuracy.eval(feed_dict={self.leNet.x: X_train, self.leNet.y: y_train, self.leNet.dropout: 1.0})
@@ -206,13 +254,4 @@ class LeNetSolver(object):
 
             return (self.best_valid_loss, self.best_valid_accuracy, self.best_valid_model)
 
-    def evaluate(self, session, X_data, y_data):
-        num_examples = len(X_data)
-        total_accuracy = 0
-        #session = tf.get_default_session()
-        for offset in range(0, num_examples, self.batch_size):
-            batch_x, batch_y = X_data[offset:offset + self.batch_size], y_data[offset:offset + self.batch_size]
-            accuracy = session.run(self.leNet.accuracy, feed_dict={self.leNet.x: batch_x, self.leNet.y: batch_y, self.leNet.dropout: 1.0})
-            total_accuracy += (accuracy * len(batch_x))
-        return total_accuracy / num_examples
 
