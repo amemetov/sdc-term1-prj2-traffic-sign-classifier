@@ -3,13 +3,14 @@ import tensorflow as tf
 from tensorflow.contrib.layers import flatten
 from sklearn.utils import shuffle
 
-class LeNetParams(object):
+class LeNetConfig(object):
     def __init__(self, input_dim, num_classes,
                  conv1_num_filters=6,  conv1_filter_size=5, conv1_stride=1,
                  pool1_size=2, pool1_stride=2,
                  conv2_num_filters=16, conv2_filter_size=5, conv2_stride=1,
                  pool2_size=2, pool2_stride=2,
                  fc1_depth=120, fc2_depth=84,
+                 use_bn=False,
                  mu=0, sigma=0.1):
         self.W, self.H, self.C = input_dim
         self.num_classes = num_classes
@@ -26,47 +27,48 @@ class LeNetParams(object):
         self.pool2_stride = pool2_stride
         self.fc1_depth = fc1_depth
         self.fc2_depth = fc2_depth
+        self.use_bn = use_bn
 
         self.mu = mu
         self.sigma = sigma
 
 
-class LeNetModel(object):
-    def __init__(self, net_params, init_weights=True):
-        self.net_params = net_params
+class LeNetParameters(object):
+    def __init__(self, net_config, init_weights=True):
+        self.net_config = net_config
 
         if init_weights:
-            mu = net_params.mu
-            sigma = net_params.sigma
+            mu = net_config.mu
+            sigma = net_config.sigma
 
-            conv1_out_w, conv1_out_h = self.calc_conv_out_size(net_params.W, net_params.H, net_params.conv1_filter_size, net_params.conv1_stride)
-            pool1_out_w, pool1_out_h = self.calc_pool_out_size(conv1_out_w, conv1_out_h, net_params.pool1_size, net_params.pool1_size, net_params.pool2_stride)
+            conv1_out_w, conv1_out_h = self.calc_conv_out_size(net_config.W, net_config.H, net_config.conv1_filter_size, net_config.conv1_stride)
+            pool1_out_w, pool1_out_h = self.calc_pool_out_size(conv1_out_w, conv1_out_h, net_config.pool1_size, net_config.pool1_size, net_config.pool2_stride)
 
-            conv2_out_w, conv2_out_h = self.calc_conv_out_size(pool1_out_w, pool1_out_h, net_params.conv2_filter_size, net_params.conv2_stride)
-            pool2_out_w, pool2_out_h = self.calc_pool_out_size(conv2_out_w, conv2_out_h, net_params.pool2_size, net_params.pool2_size, net_params.pool2_stride)
+            conv2_out_w, conv2_out_h = self.calc_conv_out_size(pool1_out_w, pool1_out_h, net_config.conv2_filter_size, net_config.conv2_stride)
+            pool2_out_w, pool2_out_h = self.calc_pool_out_size(conv2_out_w, conv2_out_h, net_config.pool2_size, net_config.pool2_size, net_config.pool2_stride)
 
             weights = 5 * [None]
             biases = 5 * [None]
 
             # Layer 1: Convolutional. Input = 32x32x1. Output = 28x28x6.
-            weights[0] = self.weight_variable(shape=(net_params.conv1_filter_size, net_params.conv1_filter_size, net_params.C, net_params.conv1_num_filters), mean=mu, stddev=sigma)
-            biases[0] = self.bias_variable((net_params.conv1_num_filters))
+            weights[0] = self.weight_variable(shape=(net_config.conv1_filter_size, net_config.conv1_filter_size, net_config.C, net_config.conv1_num_filters), mean=mu, stddev=sigma)
+            biases[0] = self.bias_variable((net_config.conv1_num_filters))
 
             # Layer 2: Convolutional. Output = 10x10x16.
-            weights[1] = self.weight_variable(shape=(net_params.conv2_filter_size, net_params.conv2_filter_size, net_params.conv1_num_filters, net_params.conv2_num_filters), mean=mu, stddev=sigma)
-            biases[1] = self.bias_variable((net_params.conv2_num_filters))
+            weights[1] = self.weight_variable(shape=(net_config.conv2_filter_size, net_config.conv2_filter_size, net_config.conv1_num_filters, net_config.conv2_num_filters), mean=mu, stddev=sigma)
+            biases[1] = self.bias_variable((net_config.conv2_num_filters))
 
             # Layer 3: Fully Connected. Input = 400. Output = 120.
-            weights[2] = self.weight_variable(shape=(pool2_out_w * pool2_out_h * net_params.conv2_num_filters, net_params.fc1_depth), mean=mu, stddev=sigma)
-            biases[2] = self.bias_variable((net_params.fc1_depth))
+            weights[2] = self.weight_variable(shape=(pool2_out_w * pool2_out_h * net_config.conv2_num_filters, net_config.fc1_depth), mean=mu, stddev=sigma)
+            biases[2] = self.bias_variable((net_config.fc1_depth))
 
             # Layer 4: Fully Connected. Input = 120. Output = 84.
-            weights[3] = self.weight_variable(shape=(net_params.fc1_depth, net_params.fc2_depth), mean=mu, stddev=sigma)
-            biases[3] = self.bias_variable((net_params.fc2_depth))
+            weights[3] = self.weight_variable(shape=(net_config.fc1_depth, net_config.fc2_depth), mean=mu, stddev=sigma)
+            biases[3] = self.bias_variable((net_config.fc2_depth))
 
             # Layer 5: Fully Connected. Input = 84. Output = n_classes.
-            weights[4] = self.weight_variable(shape=(net_params.fc2_depth, net_params.num_classes), mean=mu, stddev=sigma)#tf.Variable(tf.truncated_normal(shape=(84, n_classes), mean=mu, stddev=sigma))
-            biases[4] = self.bias_variable((net_params.num_classes))#, default_value=0)#tf.Variable(tf.zeros(n_classes))
+            weights[4] = self.weight_variable(shape=(net_config.fc2_depth, net_config.num_classes), mean=mu, stddev=sigma)#tf.Variable(tf.truncated_normal(shape=(84, n_classes), mean=mu, stddev=sigma))
+            biases[4] = self.bias_variable((net_config.num_classes))#, default_value=0)#tf.Variable(tf.zeros(n_classes))
 
             self.weights = weights
             self.biases = biases
@@ -96,18 +98,20 @@ class LeNetModel(object):
 
 class LeNet(object):
     def __init__(self, model, reg=0.0):
-        self.net_params = model.net_params
+        self.net_config = model.net_config
         self.reg = reg
 
         self.graph = tf.Graph()
         with self.graph.as_default():
             # Input data. For the training data, we use a placeholder that will be fed at run time with a training minibatch.
-            self.x = tf.placeholder(tf.float32, shape=(None, model.net_params.W, model.net_params.H, model.net_params.C))
+            self.x = tf.placeholder(tf.float32, shape=(None, model.net_config.W, model.net_config.H, model.net_config.C))
             self.y = tf.placeholder(tf.int32, shape=(None))
-            self.one_hot_y = tf.one_hot(self.y, model.net_params.num_classes)
+            self.one_hot_y = tf.one_hot(self.y, model.net_config.num_classes)
 
             # Using placeholder allows us to use Dropout only during Training process (not Evaluating)
             self.dropout = tf.placeholder(tf.float32)
+
+            self.is_training_mode = tf.placeholder(tf.bool)
 
             self.lr_start = tf.placeholder(tf.float32)
             self.lr_decay_steps = tf.placeholder(tf.float32)
@@ -121,25 +125,30 @@ class LeNet(object):
 
     def build_LeNet(self):
         # Layer 1
-        conv1 = tf.nn.conv2d(self.x, self.weights[0], strides=[1, self.net_params.conv1_stride, self.net_params.conv1_stride, 1], padding='VALID') + self.biases[0]
+        conv1 = tf.nn.conv2d(self.x, self.weights[0], strides=[1, self.net_config.conv1_stride, self.net_config.conv1_stride, 1], padding='VALID') + self.biases[0]
         conv1 = tf.nn.relu(conv1)
-        conv1 = tf.nn.max_pool(conv1, ksize=[1, self.net_params.pool1_size, self.net_params.pool1_size, 1], strides=[1, self.net_params.pool1_stride, self.net_params.pool1_stride, 1], padding='VALID')
+        conv1 = tf.nn.max_pool(conv1, ksize=[1, self.net_config.pool1_size, self.net_config.pool1_size, 1], strides=[1, self.net_config.pool1_stride, self.net_config.pool1_stride, 1], padding='VALID')
 
         # Layer 2
-        conv2 = tf.nn.conv2d(conv1, self.weights[1], strides=[1, self.net_params.conv2_stride, self.net_params.conv2_stride, 1], padding='VALID') + self.biases[1]
+        conv2 = tf.nn.conv2d(conv1, self.weights[1], strides=[1, self.net_config.conv2_stride, self.net_config.conv2_stride, 1], padding='VALID') + self.biases[1]
         conv2 = tf.nn.relu(conv2)
-        conv2 = tf.nn.max_pool(conv2, ksize=[1, self.net_params.pool2_size, self.net_params.pool2_size, 1], strides=[1, self.net_params.pool2_stride, self.net_params.pool2_stride, 1], padding='VALID')
+        conv2 = tf.nn.max_pool(conv2, ksize=[1, self.net_config.pool2_size, self.net_config.pool2_size, 1], strides=[1, self.net_config.pool2_stride, self.net_config.pool2_stride, 1], padding='VALID')
 
         # Flatten
         fc0 = flatten(conv2)
 
         # Layer 3
         fc1 = tf.matmul(fc0, self.weights[2]) + self.biases[2]
+        if self.net_config.use_bn:
+            fc1 = tf.contrib.layers.batch_norm(fc1, center=True, scale=True, is_training=self.is_training_mode)
         fc1 = tf.nn.relu(fc1)
         fc1 = tf.nn.dropout(fc1, self.dropout)
 
+
         # Layer 4
         fc2 = tf.matmul(fc1, self.weights[3]) + self.biases[3]
+        if self.net_config.use_bn:
+            fc2 = tf.contrib.layers.batch_norm(fc2, center=True, scale=True, is_training=self.is_training_mode)
         fc2 = tf.nn.relu(fc2)
         fc2 = tf.nn.dropout(fc2, self.dropout)
 
@@ -155,16 +164,22 @@ class LeNet(object):
             for w in self.weights:
                 loss += self.reg * tf.nn.l2_loss(w)
 
-        # Optimizer
-        global_step = tf.Variable(0, trainable=False)
-        learning_rate = tf.train.exponential_decay(self.lr_start, global_step, self.lr_decay_steps, self.lr_decay_rate, staircase=True)
-        # Passing global_step to minimize() will increment it at each step.
-        # optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss, global_step=global_step)
-        optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss, global_step=global_step)
-
         # Accuracy
         correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(self.one_hot_y, 1))
         accuracy_operation = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+        # Optimizer
+        # tf.contrib.layers.batch_norm doc says:
+        # When is_training is True the moving_mean and moving_variance need to be
+        # updated, by default the update_ops are placed in `tf.GraphKeys.UPDATE_OPS` so
+        # they need to be added as a dependency to the `train_op`
+        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        with tf.control_dependencies(update_ops):
+            # Ensures that we execute the update_ops before performing the train_step
+            global_step = tf.Variable(0, trainable=False)
+            learning_rate = tf.train.exponential_decay(self.lr_start, global_step, self.lr_decay_steps, self.lr_decay_rate, staircase=True)
+            # Passing global_step to minimize() will increment it at each step.
+            optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss, global_step=global_step)
 
         return (loss, optimizer, accuracy_operation)
 
@@ -182,13 +197,12 @@ class LeNet(object):
         model.weights = [w.eval() for w in self.weights]
         model.biases = [b.eval() for b in self.biases]
 
-    def evaluate(self, session, X_data, y_data, batch_size):
+    def evaluate(self, session, X_data, y_data, batch_size=128):
         num_examples = len(X_data)
         total_accuracy = 0
-        #session = tf.get_default_session()
         for offset in range(0, num_examples, batch_size):
             batch_x, batch_y = X_data[offset:offset + batch_size], y_data[offset:offset + batch_size]
-            accuracy = session.run(self.accuracy, feed_dict={self.x: batch_x, self.y: batch_y, self.dropout: 1.0})
+            accuracy = session.run(self.accuracy, feed_dict={self.x: batch_x, self.y: batch_y, self.dropout: 1.0, self.is_training_mode: False})
             total_accuracy += (accuracy * len(batch_x))
         return total_accuracy / num_examples
 
@@ -213,7 +227,7 @@ class LeNetSolver(object):
 
         self.best_valid_loss = 0
         self.best_valid_accuracy = 0
-        self.best_valid_model = LeNetModel(leNet.net_params, init_weights=False)
+        self.best_valid_params = LeNetParameters(leNet.net_config, init_weights=False)
 
     def train(self):
         with tf.Session(graph=self.leNet.graph) as session:
@@ -229,17 +243,15 @@ class LeNetSolver(object):
                     batch_x, batch_y = X_train[offset:end], y_train[offset:end]
                     feed_dict = {self.leNet.x: batch_x, self.leNet.y: batch_y,
                                  self.leNet.dropout: self.dropout_prob,
+                                 self.leNet.is_training_mode: True,
                                  self.leNet.lr_start: self.lr_start, self.leNet.lr_decay_steps: self.lr_decay_steps,
                                  self.leNet.lr_decay_rate: self.lr_decay_rate}
 
                     _, loss_val = session.run([self.leNet.optimizer, self.leNet.loss], feed_dict=feed_dict)
 
-                train_accuracy = self.leNet.evaluate(session, X_train, y_train, self.batch_size)
+                train_accuracy = self.leNet.evaluate(session, self.train_dataset, self.train_labels, self.batch_size)
                 valid_accuracy = self.leNet.evaluate(session, self.valid_dataset, self.valid_labels, self.batch_size)
 
-                #loss_val = self.leNet.loss.eval(feed_dict={self.leNet.x: X_train, self.leNet.y: y_train})
-                #train_accuracy = self.leNet.accuracy.eval(feed_dict={self.leNet.x: X_train, self.leNet.y: y_train, self.leNet.dropout: 1.0})
-                #valid_accuracy = self.leNet.accuracy.eval(feed_dict={self.leNet.x: self.valid_dataset, self.leNet.y: self.valid_labels, self.leNet.dropout: 1.0})
                 print("EPOCH {} ...".format(i + 1))
                 print("Minibatch Loss: %f" % loss_val)
                 print("Train Accuracy = {:.3f}".format(train_accuracy))
@@ -250,8 +262,8 @@ class LeNetSolver(object):
                 if valid_accuracy > self.best_valid_accuracy:
                     self.best_valid_loss = loss_val
                     self.best_valid_accuracy = valid_accuracy
-                    self.leNet.update_to_model(self.best_valid_model)
+                    self.leNet.update_to_model(self.best_valid_params)
 
-            return (self.best_valid_loss, self.best_valid_accuracy, self.best_valid_model)
+            return (self.best_valid_loss, self.best_valid_accuracy, self.best_valid_params)
 
 
