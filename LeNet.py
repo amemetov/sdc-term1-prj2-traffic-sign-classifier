@@ -4,33 +4,38 @@ from tensorflow.contrib.layers import flatten
 from sklearn.utils import shuffle
 
 class LeNetConfig(object):
-    def __init__(self, input_dim, num_classes,
-                 conv1_num_filters=6,  conv1_filter_size=5, conv1_stride=1,
-                 pool1_size=2, pool1_stride=2,
-                 conv2_num_filters=16, conv2_filter_size=5, conv2_stride=1,
-                 pool2_size=2, pool2_stride=2,
-                 fc1_depth=120, fc2_depth=84,
-                 use_bn=False,
-                 mu=0, sigma=0.1):
+    def __init__(self, input_dim, num_classes, params):
         self.W, self.H, self.C = input_dim
         self.num_classes = num_classes
 
-        self.conv1_num_filters = conv1_num_filters
-        self.conv1_filter_size = conv1_filter_size
-        self.conv1_stride = conv1_stride
-        self.pool1_size = pool1_size
-        self.pool1_stride = pool1_stride
-        self.conv2_num_filters = conv2_num_filters
-        self.conv2_filter_size = conv2_filter_size
-        self.conv2_stride = conv2_stride
-        self.pool2_size = pool2_size
-        self.pool2_stride = pool2_stride
-        self.fc1_depth = fc1_depth
-        self.fc2_depth = fc2_depth
-        self.use_bn = use_bn
+        self.conv1_num_filters = params['conv1_num_filters'] if 'conv1_num_filters' in params else 6
+        self.conv1_filter_size = params['conv1_filter_size'] if 'conv1_filter_size' in params else 5
+        self.conv1_stride = params['conv1_stride'] if 'conv1_stride' in params else 1
+        self.pool1_size = params['pool1_size'] if 'pool1_size' in params else 2
+        self.pool1_stride = params['pool1_stride'] if 'pool1_stride' in params else 2
 
-        self.mu = mu
-        self.sigma = sigma
+        self.conv2_num_filters = params['conv2_num_filters'] if 'conv2_num_filters' in params else 16
+        self.conv2_filter_size = params['conv2_filter_size'] if 'conv2_filter_size' in params else 5
+        self.conv2_stride = params['conv2_stride'] if 'conv2_stride' in params else 1
+        self.pool2_size = params['pool2_size'] if 'pool2_size' in params else 2
+        self.pool2_stride = params['pool2_stride'] if 'pool2_stride' in params else 2
+
+        self.fc1_depth = params['fc1_depth'] if 'fc1_depth' in params else 120
+        self.fc2_depth = params['fc2_depth'] if 'fc2_depth' in params else 84
+
+        self.use_bn = params['use_bn'] if 'use_bn' in params else False
+        self.dropout_prob = params['dropout_prob'] if 'dropout_prob' in params else 1.0
+        self.l2 = params['l2'] if 'l2' in params else 0.0
+
+        self.mu = params['mu'] if 'mu' in params else 0
+        self.sigma = params['sigma'] if 'sigma' in params else 0.1
+
+        self.batch_size = params['batch_size'] if 'batch_size' in params else 128
+        self.num_epochs = params['num_epochs'] if 'num_epochs' in params else 5
+
+        self.lr_start = params['lr_start'] if 'lr_start' in params else 1e-3
+        self.lr_decay_steps = params['lr_decay_steps'] if 'lr_decay_steps' in params else 100000
+        self.lr_decay_rate = params['lr_decay_rate'] if 'lr_decay_rate' in params else 0.96
 
 
 class LeNetParameters(object):
@@ -97,9 +102,8 @@ class LeNetParameters(object):
         return np.full(shape, default_value).astype(np.float32)
 
 class LeNet(object):
-    def __init__(self, model, reg=0.0):
+    def __init__(self, model):
         self.net_config = model.net_config
-        self.reg = reg
 
         self.graph = tf.Graph()
         with self.graph.as_default():
@@ -160,9 +164,9 @@ class LeNet(object):
         loss = tf.reduce_mean(cross_entropy)
 
         # L2 Regularization
-        if self.reg > 0:
+        if self.net_config.l2 > 0:
             for w in self.weights:
-                loss += self.reg * tf.nn.l2_loss(w)
+                loss += self.net_config.l2 * tf.nn.l2_loss(w)
 
         # Accuracy
         correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(self.one_hot_y, 1))
@@ -197,11 +201,11 @@ class LeNet(object):
         model.weights = [w.eval() for w in self.weights]
         model.biases = [b.eval() for b in self.biases]
 
-    def evaluate(self, session, X_data, y_data, batch_size=128):
+    def evaluate(self, session, X_data, y_data):
         num_examples = len(X_data)
         total_accuracy = 0
-        for offset in range(0, num_examples, batch_size):
-            batch_x, batch_y = X_data[offset:offset + batch_size], y_data[offset:offset + batch_size]
+        for offset in range(0, num_examples, self.net_config.batch_size):
+            batch_x, batch_y = X_data[offset:offset + self.net_config.batch_size], y_data[offset:offset + self.net_config.batch_size]
             accuracy = session.run(self.accuracy, feed_dict={self.x: batch_x, self.y: batch_y, self.dropout: 1.0, self.is_training_mode: False})
             total_accuracy += (accuracy * len(batch_x))
         return total_accuracy / num_examples
@@ -209,61 +213,75 @@ class LeNet(object):
 
 
 class LeNetSolver(object):
-    def __init__(self, leNet,
-                 train_dataset, train_labels, valid_dataset, valid_labels,
-                 batch_size=100, num_epochs=10, dropout_prob=1.0,
-                 lr_start=1e-4, lr_decay_steps=100000, lr_decay_rate=0.96):
+    def __init__(self, leNet, train_dataset, train_labels, valid_dataset, valid_labels, debug=True):
         self.leNet = leNet
+        self.net_config = leNet.net_config
         self.train_dataset = train_dataset
         self.train_labels = train_labels
         self.valid_dataset = valid_dataset
         self.valid_labels = valid_labels
-        self.batch_size = batch_size
-        self.num_epochs = num_epochs
-        self.dropout_prob = dropout_prob
-        self.lr_start = lr_start
-        self.lr_decay_steps = lr_decay_steps
-        self.lr_decay_rate = lr_decay_rate
 
-        self.best_valid_loss = 0
-        self.best_valid_accuracy = 0
-        self.best_valid_params = LeNetParameters(leNet.net_config, init_weights=False)
+        self.debug = debug
+
 
     def train(self):
+        best_valid_loss = 0
+        best_valid_accuracy = 0
+        best_valid_params = LeNetParameters(self.leNet.net_config, init_weights=False)
+
+        history = {'train_loss': [], 'train_acc': [], 'val_loss': [], 'val_acc': []}
+
         with tf.Session(graph=self.leNet.graph) as session:
             session.run(tf.global_variables_initializer())
             num_examples = len(self.train_dataset)
 
             print("Training...")
             print()
-            for i in range(self.num_epochs):
+            for i in range(self.net_config.num_epochs):
                 X_train, y_train = shuffle(self.train_dataset, self.train_labels)
-                for offset in range(0, num_examples, self.batch_size):
-                    end = offset + self.batch_size
+                train_total_loss = 0.0
+                for offset in range(0, num_examples, self.net_config.batch_size):
+                    end = offset + self.net_config.batch_size
                     batch_x, batch_y = X_train[offset:end], y_train[offset:end]
                     feed_dict = {self.leNet.x: batch_x, self.leNet.y: batch_y,
-                                 self.leNet.dropout: self.dropout_prob,
+                                 self.leNet.dropout: self.net_config.dropout_prob,
                                  self.leNet.is_training_mode: True,
-                                 self.leNet.lr_start: self.lr_start, self.leNet.lr_decay_steps: self.lr_decay_steps,
-                                 self.leNet.lr_decay_rate: self.lr_decay_rate}
+                                 self.leNet.lr_start: self.net_config.lr_start, self.leNet.lr_decay_steps: self.net_config.lr_decay_steps,
+                                 self.leNet.lr_decay_rate: self.net_config.lr_decay_rate}
 
                     _, loss_val = session.run([self.leNet.optimizer, self.leNet.loss], feed_dict=feed_dict)
+                    train_total_loss += (loss_val * len(batch_x) )
 
-                train_accuracy = self.leNet.evaluate(session, self.train_dataset, self.train_labels, self.batch_size)
-                valid_accuracy = self.leNet.evaluate(session, self.valid_dataset, self.valid_labels, self.batch_size)
+                train_total_loss /= num_examples
 
-                print("EPOCH {} ...".format(i + 1))
-                print("Minibatch Loss: %f" % loss_val)
-                print("Train Accuracy = {:.3f}".format(train_accuracy))
-                print("Validation Accuracy = {:.3f}".format(valid_accuracy))
-                print()
+                train_accuracy = self.leNet.evaluate(session, self.train_dataset, self.train_labels)
+                valid_accuracy = self.leNet.evaluate(session, self.valid_dataset, self.valid_labels)
+
+                valid_loss = self.leNet.loss.eval(feed_dict={self.leNet.x: self.valid_dataset,
+                                                             self.leNet.y: self.valid_labels,
+                                                             self.leNet.dropout: 1.0, self.leNet.is_training_mode: False})
+
+                if self.debug:
+                    print("EPOCH {} ...".format(i + 1))
+                    #print("Minibatch Loss: %f" % loss_val)
+                    print("Train Loss: %f" % train_total_loss)
+                    print("Train Accuracy = {:.3f}".format(train_accuracy))
+                    print("Validation Loss = {:.3f}".format(valid_loss))
+                    print("Validation Accuracy = {:.3f}".format(valid_accuracy))
+                    print()
 
                 # Keep track of the best model
-                if valid_accuracy > self.best_valid_accuracy:
-                    self.best_valid_loss = loss_val
-                    self.best_valid_accuracy = valid_accuracy
-                    self.leNet.update_to_model(self.best_valid_params)
+                if valid_accuracy > best_valid_accuracy:
+                    best_valid_loss = valid_loss
+                    best_valid_accuracy = valid_accuracy
+                    self.leNet.update_to_model(best_valid_params)
 
-            return (self.best_valid_loss, self.best_valid_accuracy, self.best_valid_params)
+                # store history
+                history['train_loss'].append(train_total_loss)
+                history['train_acc'].append(train_accuracy)
+                history['val_loss'].append(valid_loss)
+                history['val_acc'].append(valid_accuracy)
+
+            return (history, best_valid_loss, best_valid_accuracy, best_valid_params)
 
 
