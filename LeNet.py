@@ -210,6 +210,12 @@ class LeNet(object):
             total_accuracy += (accuracy * len(batch_x))
         return total_accuracy / num_examples
 
+    def predict(self, X_test, y_test):
+        with tf.Session(graph=self.graph) as session:
+            session.run(tf.global_variables_initializer())
+            test_accuracy = self.evaluate(session, X_test, y_test)
+            return test_accuracy
+
 
 
 class LeNetSolver(object):
@@ -229,7 +235,7 @@ class LeNetSolver(object):
         best_valid_accuracy = 0
         best_valid_params = LeNetParameters(self.leNet.net_config, init_weights=False)
 
-        history = {'train_loss': [], 'train_acc': [], 'val_loss': [], 'val_acc': []}
+        history = {'train_loss': [], 'train_acc': [], 'valid_loss': [], 'valid_acc': []}
 
         with tf.Session(graph=self.leNet.graph) as session:
             session.run(tf.global_variables_initializer())
@@ -279,8 +285,11 @@ class LeNetSolver(object):
                 # store history
                 history['train_loss'].append(train_total_loss)
                 history['train_acc'].append(train_accuracy)
-                history['val_loss'].append(valid_loss)
-                history['val_acc'].append(valid_accuracy)
+                history['valid_loss'].append(valid_loss)
+                history['valid_acc'].append(valid_accuracy)
+
+            #if self.debug:
+            print("Best Valid Accuracy: {:.1f}% \n".format(best_valid_accuracy * 100))
 
             return (history, best_valid_loss, best_valid_accuracy, best_valid_params)
 
