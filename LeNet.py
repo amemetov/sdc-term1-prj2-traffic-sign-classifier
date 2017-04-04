@@ -125,7 +125,7 @@ class LeNet(object):
             self.weights = [tf.Variable(w) for w in model.weights]
             self.biases = [tf.Variable(b) for b in model.biases]
 
-            (self.loss, self.optimizer, self.accuracy) = self.build_LeNet()
+            self.build_LeNet()
 
     def build_LeNet(self):
         # Layer 1
@@ -169,7 +169,8 @@ class LeNet(object):
                 loss += self.net_config.l2 * tf.nn.l2_loss(w)
 
         # Accuracy
-        correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(self.one_hot_y, 1))
+        predict_op = tf.argmax(logits, 1)
+        correct_prediction = tf.equal(predict_op, tf.argmax(self.one_hot_y, 1))
         accuracy_operation = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
         # Optimizer
@@ -185,9 +186,12 @@ class LeNet(object):
             # Passing global_step to minimize() will increment it at each step.
             optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss, global_step=global_step)
 
-        return (loss, optimizer, accuracy_operation)
-
-
+        # store necessary tensors for further using
+        self.logits = logits
+        self.predict_op = predict_op
+        self.loss = loss
+        self.optimizer = optimizer
+        self.accuracy = accuracy_operation
 
     def update_from_model(self, model):
         with self.graph.as_default():
@@ -195,7 +199,7 @@ class LeNet(object):
             self.biases = [tf.Variable(b) for b in model.biases]
 
             # rebuild layers
-            (self.loss, self.optimizer, self.accuracy) = self.build_LeNet()
+            self.build_LeNet()
 
     def update_to_model(self, model):
         model.weights = [w.eval() for w in self.weights]
@@ -210,12 +214,21 @@ class LeNet(object):
             total_accuracy += (accuracy * len(batch_x))
         return total_accuracy / num_examples
 
-    def predict(self, X_test, y_test):
+    def eval_accuracy(self, X_test, y_test):
         with tf.Session(graph=self.graph) as session:
             session.run(tf.global_variables_initializer())
             test_accuracy = self.evaluate(session, X_test, y_test)
             return test_accuracy
 
+    def predict_class(self, X):
+        with tf.Session(graph=self.graph) as session:
+            session.run(tf.global_variables_initializer())
+            return session.run(self.predict_op, feed_dict={self.x: X, self.dropout: 1.0, self.is_training_mode: False})
+
+    def predict_probabilities(self, X):
+        with tf.Session(graph=self.graph) as session:
+            session.run(tf.global_variables_initializer())
+            return session.run(self.logits, feed_dict={self.x: X, self.dropout: 1.0, self.is_training_mode: False})
 
 
 class LeNetSolver(object):
@@ -288,8 +301,13 @@ class LeNetSolver(object):
                 history['valid_loss'].append(valid_loss)
                 history['valid_acc'].append(valid_accuracy)
 
+
+            # Update weights of leNet with best values
+            self.leNet.update_from_model(best_valid_params)
+
             #if self.debug:
             print("Best Valid Accuracy: {:.1f}% \n".format(best_valid_accuracy * 100))
+
 
             return (history, best_valid_loss, best_valid_accuracy, best_valid_params)
 
