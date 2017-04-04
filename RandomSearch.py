@@ -2,12 +2,13 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from LeNet import LeNetConfig, LeNetParameters, LeNet, LeNetSolver
+from LeNet import LeNetConfig, LeNet
 
 class RandMethod(ABC):
     @abstractmethod
     def gen_val(self):
         pass
+
 
 class RandInt(RandMethod):
     def __init__(self, start, end):
@@ -16,6 +17,7 @@ class RandInt(RandMethod):
 
     def gen_val(self):
         return np.random.randint(self.start, self.end)
+
 
 class RandFloat(RandMethod):
     def __init__(self, start, end):
@@ -27,7 +29,6 @@ class RandFloat(RandMethod):
         r = np.random.rand()
         # r is from [0, 1), map to [start, end)
         return self.start + r*self.range
-
 
 
 class RandomSearch(object):
@@ -42,27 +43,26 @@ class RandomSearch(object):
         result_best_history = None
         result_best_valid_loss = None
         result_best_valid_accuracy = 0
-        result_best_valid_params = None
+        result_best_valid_net = None
         result_best_hyperparams = None
 
         for i in range(self.num_iter_search):
-            params = self.gen_params()
+            params = self._gen_params()
             print("====================================================================")
             print("===== Searching iter:{0}\n hyperparams:{1} =====\n".format(i, params))
 
-            (history, best_valid_loss, best_valid_accuracy, best_valid_params) = self._train(input_dim, num_classes, params, X_train, y_train, X_valid, y_valid)
+            (history, best_valid_loss, best_valid_accuracy, best_valid_net) = self._train(input_dim, num_classes, params, X_train, y_train, X_valid, y_valid)
 
             if result_best_valid_accuracy < best_valid_accuracy:
                 result_best_history = history
                 result_best_valid_loss = best_valid_loss
                 result_best_valid_accuracy = best_valid_accuracy
-                result_best_valid_params = best_valid_params
+                result_best_valid_net = best_valid_net
                 result_best_hyperparams = params
 
-        return (result_best_hyperparams, result_best_history, result_best_valid_loss, result_best_valid_accuracy, result_best_valid_params)
+        return (result_best_hyperparams, result_best_history, result_best_valid_loss, result_best_valid_accuracy, result_best_valid_net)
 
-
-    def gen_params(self):
+    def _gen_params(self):
         params = dict()
         for k, v in self.param_distribs.items():
             if isinstance(v, RandMethod):
@@ -74,7 +74,6 @@ class RandomSearch(object):
 
     def _train(self, input_dim, num_classes, params, X_train, y_train, X_valid, y_valid):
         lenet_config = LeNetConfig(input_dim, num_classes, params)
-        lenet_params = LeNetParameters(lenet_config)
-        lenet = LeNet(lenet_params)
-        solver = LeNetSolver(lenet, X_train, y_train, X_valid, y_valid, debug=False)
-        return solver.train()
+        lenet = LeNet(lenet_config)
+        history, best_valid_loss, best_valid_accuracy = lenet.fit(X_train, y_train, X_valid, y_valid, debug=False)
+        return history, best_valid_loss, best_valid_accuracy, lenet
