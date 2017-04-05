@@ -4,9 +4,10 @@ import skimage.transform as transform
 from sklearn.utils import shuffle
 
 class AugmentDataGenerator(object):
-    def __init__(self, X_origin, y_origin):
+    def __init__(self, X_origin, y_origin, augment_prob=0.5):
         self.X_origin = X_origin
         self.y_origin = y_origin
+        self.augment_prob = augment_prob
 
     def next_batch(self, batch_size):
         choice_ind = np.random.choice(self.X_origin.shape[0], batch_size)
@@ -16,7 +17,7 @@ class AugmentDataGenerator(object):
         X_batch = np.ndarray(X.shape)
 
         for i in range(X.shape[0]):
-            if np.random.random() < 1:#0.5:
+            if np.random.random() <= self.augment_prob:
                 X_batch[i] = augment_image(X[i])
             else:
                 X_batch[i] = X[i]
