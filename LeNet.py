@@ -8,20 +8,29 @@ class LeNetConfig(object):
         self.W, self.H, self.C = input_dim
         self.num_classes = num_classes
 
-        self.conv1_num_filters = params['conv1_num_filters'] if 'conv1_num_filters' in params else 6
-        self.conv1_filter_size = params['conv1_filter_size'] if 'conv1_filter_size' in params else 5
-        self.conv1_stride = params['conv1_stride'] if 'conv1_stride' in params else 1
-        self.pool1_size = params['pool1_size'] if 'pool1_size' in params else 2
-        self.pool1_stride = params['pool1_stride'] if 'pool1_stride' in params else 2
+        if 'conv' in params:
+            self.conv = params['conv']
+        else:
+            self.conv = [{'num_filters': 6, 'filter_size': 5, 'stride': 1, 'pool_size': 2, 'pool_stride': 2},
+                         {'num_filters': 16, 'filter_size': 5, 'stride': 1, 'pool_size': 2, 'pool_stride': 2}]
 
-        self.conv2_num_filters = params['conv2_num_filters'] if 'conv2_num_filters' in params else 16
-        self.conv2_filter_size = params['conv2_filter_size'] if 'conv2_filter_size' in params else 5
-        self.conv2_stride = params['conv2_stride'] if 'conv2_stride' in params else 1
-        self.pool2_size = params['pool2_size'] if 'pool2_size' in params else 2
-        self.pool2_stride = params['pool2_stride'] if 'pool2_stride' in params else 2
+        # validate conv layers
+        for cl in self.conv:
+            if 'num_filters' not in cl:
+                cl['num_filters'] = 6
+            if 'filter_size' not in cl:
+                cl['filter_size'] = 5
+            if 'stride' not in cl:
+                cl['stride'] = 1
+            if 'pool_size' not in cl:
+                cl['pool_size'] = 2
+            if 'pool_stride' not in cl:
+                cl['pool_stride'] = 2
 
-        self.fc1_depth = params['fc1_depth'] if 'fc1_depth' in params else 120
-        self.fc2_depth = params['fc2_depth'] if 'fc2_depth' in params else 84
+        if 'fc' in params:
+            self.fc = params['fc']
+        else:
+            self.fc = [120, 84]
 
         self.use_bn = params['use_bn'] if 'use_bn' in params else False
         self.dropout_prob = params['dropout_prob'] if 'dropout_prob' in params else 1.0
@@ -37,6 +46,8 @@ class LeNetConfig(object):
         self.lr_decay_steps = params['lr_decay_steps'] if 'lr_decay_steps' in params else 100000
         self.lr_decay_rate = params['lr_decay_rate'] if 'lr_decay_rate' in params else 0.96
 
+        self.optimizer = params['optimizer'] if 'optimizer' in params else 'adam'
+
 
 class LeNetWeights(object):
     def __init__(self, net_config, init_weights=True):
@@ -49,34 +60,36 @@ class LeNetWeights(object):
             mu = net_config.mu
             sigma = net_config.sigma
 
-            conv1_out_w, conv1_out_h = self.calc_conv_out_size(net_config.W, net_config.H, net_config.conv1_filter_size, net_config.conv1_stride)
-            pool1_out_w, pool1_out_h = self.calc_pool_out_size(conv1_out_w, conv1_out_h, net_config.pool1_size, net_config.pool1_size, net_config.pool2_stride)
+            weights = []
+            biases = []
 
-            conv2_out_w, conv2_out_h = self.calc_conv_out_size(pool1_out_w, pool1_out_h, net_config.conv2_filter_size, net_config.conv2_stride)
-            pool2_out_w, pool2_out_h = self.calc_pool_out_size(conv2_out_w, conv2_out_h, net_config.pool2_size, net_config.pool2_size, net_config.pool2_stride)
+            conv_num = len(net_config.conv)
+            fc_num = len(net_config.fc)
 
-            weights = 5 * [None]
-            biases = 5 * [None]
+            # Convolutional Layers Weights and compute Pool Out Size
+            conv = net_config.conv
+            pool_out_w, pool_out_h = net_config.W, net_config.H
+            conv_prev_num_filters = net_config.C
+            for i in range(conv_num):
+                weights.append(self.weight_variable(shape=(conv[i]['filter_size'], conv[i]['filter_size'], conv_prev_num_filters, conv[i]['num_filters']), mean=mu, stddev=sigma))
+                biases.append(self.bias_variable((conv[i]['num_filters']), 0))
 
-            # Layer 1: Convolutional. Input = 32x32x1. Output = 28x28x6.
-            weights[0] = self.weight_variable(shape=(net_config.conv1_filter_size, net_config.conv1_filter_size, net_config.C, net_config.conv1_num_filters), mean=mu, stddev=sigma)
-            biases[0] = self.bias_variable((net_config.conv1_num_filters))
+                conv_prev_num_filters = conv[i]['num_filters']
+                conv_out_w, conv_out_h = self.calc_conv_out_size(pool_out_w, pool_out_h, conv[i]['filter_size'], conv[i]['stride'])
+                pool_out_w, pool_out_h = self.calc_pool_out_size(conv_out_w, conv_out_h, conv[i]['pool_size'], conv[i]['pool_size'], conv[i]['pool_stride'])
 
-            # Layer 2: Convolutional. Output = 10x10x16.
-            weights[1] = self.weight_variable(shape=(net_config.conv2_filter_size, net_config.conv2_filter_size, net_config.conv1_num_filters, net_config.conv2_num_filters), mean=mu, stddev=sigma)
-            biases[1] = self.bias_variable((net_config.conv2_num_filters))
+            # FullyConnected Layers Weights
+            fc = net_config.fc
+            fc_in_size = pool_out_w * pool_out_h * conv[-1]['num_filters']
+            for i in range(fc_num):
+                fc_out_size = fc[i]
+                weights.append(self.weight_variable(shape=(fc_in_size, fc_out_size), mean=mu, stddev=sigma))
+                biases.append(self.bias_variable((fc_out_size), 0))
+                fc_in_size = fc_out_size
 
-            # Layer 3: Fully Connected. Input = 400. Output = 120.
-            weights[2] = self.weight_variable(shape=(pool2_out_w * pool2_out_h * net_config.conv2_num_filters, net_config.fc1_depth), mean=mu, stddev=sigma)
-            biases[2] = self.bias_variable((net_config.fc1_depth))
-
-            # Layer 4: Fully Connected. Input = 120. Output = 84.
-            weights[3] = self.weight_variable(shape=(net_config.fc1_depth, net_config.fc2_depth), mean=mu, stddev=sigma)
-            biases[3] = self.bias_variable((net_config.fc2_depth))
-
-            # Layer 5: Fully Connected. Input = 84. Output = n_classes.
-            weights[4] = self.weight_variable(shape=(net_config.fc2_depth, net_config.num_classes), mean=mu, stddev=sigma)#tf.Variable(tf.truncated_normal(shape=(84, n_classes), mean=mu, stddev=sigma))
-            biases[4] = self.bias_variable((net_config.num_classes))#, default_value=0)#tf.Variable(tf.zeros(n_classes))
+            # Readout Layer
+            weights.append(self.weight_variable(shape=(fc_in_size, net_config.num_classes), mean=mu, stddev=sigma))
+            biases.append(self.bias_variable((net_config.num_classes)))
 
             self.weights = weights
             self.biases = biases
@@ -123,42 +136,45 @@ class LeNet(object):
             self.lr_decay_rate = tf.placeholder(tf.float32)
 
             # Build Tensors for Weights and biases
-            self.weights = [tf.Variable(w, name='w_' + str(i)) for w, i in zip(net_weights.weights, range(5))]
-            self.biases = [tf.Variable(b, name='b_' + str(i)) for b, i in zip(net_weights.biases, range(5))]
+            self.weights = [tf.Variable(w, name='w_' + str(i)) for w, i in zip(net_weights.weights, range(len(net_weights.weights)))]
+            self.biases = [tf.Variable(b, name='b_' + str(i)) for b, i in zip(net_weights.biases, range(len(net_weights.biases)))]
 
             self._build_layers()
 
     def _build_layers(self):
-        # Layer 1
-        conv1 = tf.add(tf.nn.conv2d(self.x, self.weights[0], strides=[1, self.net_config.conv1_stride, self.net_config.conv1_stride, 1], padding='VALID'), self.biases[0], name='conv_1')
-        relu1 = tf.nn.relu(conv1, name='conv_1_relu')
-        pool1 = tf.nn.max_pool(relu1, ksize=[1, self.net_config.pool1_size, self.net_config.pool1_size, 1], strides=[1, self.net_config.pool1_stride, self.net_config.pool1_stride, 1], padding='VALID', name='conv_1_pool')
+        conv_num = len(self.net_config.conv)
+        fc_num = len(self.net_config.fc)
 
-        # Layer 2
-        conv2 = tf.add(tf.nn.conv2d(pool1, self.weights[1], strides=[1, self.net_config.conv2_stride, self.net_config.conv2_stride, 1], padding='VALID'), self.biases[1], name='conv_2')
-        relu2 = tf.nn.relu(conv2, name='conv_2_relu')
-        pool2 = tf.nn.max_pool(relu2, ksize=[1, self.net_config.pool2_size, self.net_config.pool2_size, 1], strides=[1, self.net_config.pool2_stride, self.net_config.pool2_stride, 1], padding='VALID', name='conv_2_pool')
+        # Convolutional Layers
+        conv = self.net_config.conv
+        conv_input = self.x
+        for i in range(conv_num):
+            tf_conv = tf.add(tf.nn.conv2d(conv_input, self.weights[i],
+                                          strides=[1, conv[i]['stride'], conv[i]['stride'], 1],
+                                          padding='VALID'), self.biases[i], name='conv_{0}'.format(i+1))
+            tf_relu = tf.nn.relu(tf_conv, name='conv_{0}_relu'.format(i+1))
+            tf_pool = tf.nn.max_pool(tf_relu, ksize=[1, conv[i]['pool_size'], conv[i]['pool_size'], 1],
+                                     strides=[1, conv[i]['pool_stride'], conv[i]['pool_stride'], 1],
+                                     padding='VALID', name='conv_{0}_pool'.format(i+1))
+            conv_input = tf_pool
 
         # Flatten
-        fc0 = flatten(pool2)
+        fc0 = flatten(conv_input)
 
-        # Layer 3
-        fc1 = tf.add(tf.matmul(fc0, self.weights[2]), self.biases[2], name='fc_1')
-        if self.net_config.use_bn:
-            fc1 = tf.contrib.layers.batch_norm(fc1, center=True, scale=True, is_training=self.is_training_mode)
-        fc1 = tf.nn.relu(fc1, name='fc_1_relu')
-        fc1 = tf.nn.dropout(fc1, self.dropout, name='fc_1_dropout')
+        # FC Layers
+        fc = self.net_config.fc
+        fc_input = fc0
+        for i in range(fc_num):
+            w_i = i + conv_num
+            tf_fc = tf.add(tf.matmul(fc_input, self.weights[w_i]), self.biases[w_i], name='fc_{0}'.format(i+1))
+            if self.net_config.use_bn:
+                tf_fc = tf.contrib.layers.batch_norm(tf_fc, center=True, scale=True, is_training=self.is_training_mode)
+            tf_fc_relu = tf.nn.relu(tf_fc, name='fc_{0}_relu'.format(i+1))
+            tf_fc_dropout = tf.nn.dropout(tf_fc_relu, self.dropout, name='fc_{0}_dropout'.format(i+1))
+            fc_input = tf_fc_dropout
 
-
-        # Layer 4
-        fc2 = tf.add(tf.matmul(fc1, self.weights[3]), self.biases[3], name='fc_2')
-        if self.net_config.use_bn:
-            fc2 = tf.contrib.layers.batch_norm(fc2, center=True, scale=True, is_training=self.is_training_mode)
-        fc2 = tf.nn.relu(fc2, name='fc_2_relu')
-        fc2 = tf.nn.dropout(fc2, self.dropout, name='fc_2_dropout')
-
-        # Layer 5 - Readout Layer
-        logits = tf.add(tf.matmul(fc2, self.weights[4]), self.biases[4], name='logits')
+        # Readout Layer
+        logits = tf.add(tf.matmul(fc_input, self.weights[-1]), self.biases[-1], name='logits')
 
         # Loss
         cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits, self.one_hot_y, name='cross_entropy')
@@ -185,7 +201,7 @@ class LeNet(object):
             global_step = tf.Variable(0, trainable=False)
             learning_rate = tf.train.exponential_decay(self.lr_start, global_step, self.lr_decay_steps, self.lr_decay_rate, staircase=True)
             # Passing global_step to minimize() will increment it at each step.
-            optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss, global_step=global_step)
+            optimizer = self._create_optimizer(learning_rate).minimize(loss, global_step=global_step)
 
         # store necessary tensors for further using
         self.logits = logits
@@ -193,6 +209,22 @@ class LeNet(object):
         self.loss = loss
         self.optimizer = optimizer
         self.accuracy = accuracy_op
+
+    def _create_optimizer(self, learning_rate):
+        if self.net_config.optimizer == 'gd':
+            return tf.train.GradientDescentOptimizer(learning_rate)
+        if self.net_config.optimizer == 'adadelta':
+            return tf.train.AdadeltaOptimizer(learning_rate)
+        if self.net_config.optimizer == 'adagrad':
+            return tf.train.AdagradOptimizer(learning_rate)
+        if self.net_config.optimizer == 'momentum':
+            return tf.train.MomentumOptimizer(learning_rate, 0.9)
+        elif self.net_config.optimizer == 'ftrl':
+            return tf.train.FtrlOptimizer(learning_rate)
+        elif self.net_config.optimizer == 'rmsp':
+            return tf.train.RMSPropOptimizer(learning_rate)
+        else:# self.net_config.optimizer == 'adam':
+            return tf.train.AdamOptimizer(learning_rate)
 
     def load_weights(self, weights):
         self._build_graph(self.net_config, weights)
