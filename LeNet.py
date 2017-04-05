@@ -76,9 +76,12 @@ class LeNetWeights(object):
 
                 conv_prev_num_filters = conv[i]['num_filters']
                 conv_out_w, conv_out_h = self.calc_conv_out_size(pool_out_w, pool_out_h, conv[i]['filter_size'], conv[i]['stride'])
-                pool_out_w, pool_out_h = self.calc_pool_out_size(conv_out_w, conv_out_h, conv[i]['pool_size'], conv[i]['pool_size'], conv[i]['pool_stride'])
+                if conv[i]['pool_size'] > 0:
+                    pool_out_w, pool_out_h = self.calc_pool_out_size(conv_out_w, conv_out_h, conv[i]['pool_size'], conv[i]['pool_size'], conv[i]['pool_stride'])
+                else:
+                    pool_out_w, pool_out_h = conv_out_w, conv_out_h
 
-            # FullyConnected Layers Weights
+                    # FullyConnected Layers Weights
             fc = net_config.fc
             fc_in_size = pool_out_w * pool_out_h * conv[-1]['num_filters']
             for i in range(fc_num):
@@ -153,10 +156,13 @@ class LeNet(object):
                                           strides=[1, conv[i]['stride'], conv[i]['stride'], 1],
                                           padding='VALID'), self.biases[i], name='conv_{0}'.format(i+1))
             tf_relu = tf.nn.relu(tf_conv, name='conv_{0}_relu'.format(i+1))
-            tf_pool = tf.nn.max_pool(tf_relu, ksize=[1, conv[i]['pool_size'], conv[i]['pool_size'], 1],
-                                     strides=[1, conv[i]['pool_stride'], conv[i]['pool_stride'], 1],
-                                     padding='VALID', name='conv_{0}_pool'.format(i+1))
-            conv_input = tf_pool
+            if conv[i]['pool_size'] > 0:
+                tf_pool = tf.nn.max_pool(tf_relu, ksize=[1, conv[i]['pool_size'], conv[i]['pool_size'], 1],
+                                         strides=[1, conv[i]['pool_stride'], conv[i]['pool_stride'], 1],
+                                         padding='VALID', name='conv_{0}_pool'.format(i+1))
+                conv_input = tf_pool
+            else:
+                conv_input = tf_relu
 
         # Flatten
         fc0 = flatten(conv_input)
@@ -234,6 +240,15 @@ class LeNet(object):
         weights.weights = [w.eval() for w in self.weights]
         weights.biases = [b.eval() for b in self.biases]
         return weights
+
+    def eval_loss(self, session, X, y):
+        num_examples = len(X)
+        total_loss = 0
+        for offset in range(0, num_examples, self.net_config.batch_size):
+            batch_x, batch_y = X[offset:offset + self.net_config.batch_size], y[offset:offset + self.net_config.batch_size]
+            loss = session.run(self.loss, feed_dict={self.x: batch_x, self.y: batch_y, self.dropout: 1.0, self.is_training_mode: False})
+            total_loss += (loss * len(batch_x))
+        return total_loss / num_examples
 
     def evaluate(self, session, X_data, y_data):
         num_examples = len(X_data)
@@ -358,10 +373,7 @@ class LeNetSolver(object):
 
                 train_accuracy = self.leNet.evaluate(session, train_dataset, train_labels)
                 valid_accuracy = self.leNet.evaluate(session, self.valid_dataset, self.valid_labels)
-
-                valid_loss = self.leNet.loss.eval(feed_dict={self.leNet.x: self.valid_dataset,
-                                                             self.leNet.y: self.valid_labels,
-                                                             self.leNet.dropout: 1.0, self.leNet.is_training_mode: False})
+                valid_loss = self.leNet.eval_loss(session, self.valid_dataset, self.valid_labels)
 
                 if self.debug:
                     print("EPOCH {} ...".format(i + 1))
