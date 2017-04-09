@@ -119,9 +119,15 @@ class LeNetWeights(object):
 class LeNet(object):
     def __init__(self, net_config):
         self.net_config = net_config
+
+        self.graph = None
+        self.session = None
+
         self._build_graph(net_config, LeNetWeights(net_config))
 
     def _build_graph(self, net_config, net_weights):
+        self.close_session()
+
         self.graph = tf.Graph()
         with self.graph.as_default():
             # Input data. For the training data, we use a placeholder that will be fed at run time with a training minibatch.
@@ -143,6 +149,12 @@ class LeNet(object):
             self.biases = [tf.Variable(b, name='b_' + str(i)) for b, i in zip(net_weights.biases, range(len(net_weights.biases)))]
 
             self._build_layers()
+
+            self.saver = tf.train.Saver()
+            self.init_op = tf.global_variables_initializer()
+
+        self.session = tf.Session(graph=self.graph)
+        self.session.run(self.init_op)#tf.global_variables_initializer())
 
     def _build_layers(self):
         conv_num = len(self.net_config.conv)
@@ -232,54 +244,52 @@ class LeNet(object):
         else:# self.net_config.optimizer == 'adam':
             return tf.train.AdamOptimizer(learning_rate)
 
+    def close_session(self):
+        if self.session is not None:
+            self.session.close()
+
+    def save(self, save_path):
+        self.saver.save(sess=self.session, save_path=save_path)
+
+    def restore(self, save_path):
+        self.saver.restore(sess=self.session, save_path=save_path)
+
     def load_weights(self, weights):
         self._build_graph(self.net_config, weights)
 
     def get_weights(self):
         weights = LeNetWeights(self.net_config, init_weights=False)
-        weights.weights = [w.eval() for w in self.weights]
-        weights.biases = [b.eval() for b in self.biases]
+        weights.weights = [w.eval(session=self.session) for w in self.weights]
+        weights.biases = [b.eval(session=self.session) for b in self.biases]
         return weights
 
-    def eval_loss(self, session, X, y):
+    def eval_loss(self, X, y):
         num_examples = len(X)
         total_loss = 0
         for offset in range(0, num_examples, self.net_config.batch_size):
             batch_x, batch_y = X[offset:offset + self.net_config.batch_size], y[offset:offset + self.net_config.batch_size]
-            loss = session.run(self.loss, feed_dict={self.x: batch_x, self.y: batch_y, self.dropout: 1.0, self.is_training_mode: False})
+            loss = self.session.run(self.loss, feed_dict={self.x: batch_x, self.y: batch_y, self.dropout: 1.0, self.is_training_mode: False})
             total_loss += (loss * len(batch_x))
         return total_loss / num_examples
 
-    def evaluate(self, session, X_data, y_data):
-        num_examples = len(X_data)
+    def eval_accuracy(self, X, y):
+        num_examples = len(X)
         total_accuracy = 0
         for offset in range(0, num_examples, self.net_config.batch_size):
-            batch_x, batch_y = X_data[offset:offset + self.net_config.batch_size], y_data[offset:offset + self.net_config.batch_size]
-            accuracy = session.run(self.accuracy, feed_dict={self.x: batch_x, self.y: batch_y, self.dropout: 1.0, self.is_training_mode: False})
+            batch_x, batch_y = X[offset:offset + self.net_config.batch_size], y[offset:offset + self.net_config.batch_size]
+            accuracy = self.session.run(self.accuracy, feed_dict={self.x: batch_x, self.y: batch_y, self.dropout: 1.0, self.is_training_mode: False})
             total_accuracy += (accuracy * len(batch_x))
         return total_accuracy / num_examples
 
-    def eval_accuracy(self, X_test, y_test):
-        with tf.Session(graph=self.graph) as session:
-            session.run(tf.global_variables_initializer())
-            test_accuracy = self.evaluate(session, X_test, y_test)
-            return test_accuracy
-
     def predict_class(self, X):
-        with tf.Session(graph=self.graph) as session:
-            session.run(tf.global_variables_initializer())
-            return session.run(self.predict, feed_dict={self.x: X, self.dropout: 1.0, self.is_training_mode: False})
+        return self.session.run(self.predict, feed_dict={self.x: X, self.dropout: 1.0, self.is_training_mode: False})
 
     def predict_probabilities(self, X):
-        with tf.Session(graph=self.graph) as session:
-            session.run(tf.global_variables_initializer())
-            return session.run(self.logits, feed_dict={self.x: X, self.dropout: 1.0, self.is_training_mode: False})
+        return self.session.run(self.logits, feed_dict={self.x: X, self.dropout: 1.0, self.is_training_mode: False})
 
     def activation(self, image, var_name):
-        with tf.Session(graph=self.graph) as session:
-            session.run(tf.global_variables_initializer())
-            tf_activation = self.graph.get_tensor_by_name(var_name + ":0")
-            return tf_activation.eval(session=session, feed_dict={self.x: np.array(image), self.dropout: 1.0, self.is_training_mode: False})
+        tf_activation = self.graph.get_tensor_by_name(var_name + ":0")
+        return tf_activation.eval(session=self.session, feed_dict={self.x: np.array(image), self.dropout: 1.0, self.is_training_mode: False})
 
     def fit(self, X_train, y_train, X_valid, y_valid, debug=True):
         steps_per_epoch = int(len(X_train) / self.net_config.batch_size)
@@ -287,7 +297,6 @@ class LeNet(object):
 
     def fit_generator(self, train_generator, steps_per_epoch, X_valid, y_valid, debug=True):
         return LeNetSolver(self, TrainAugmentDataSource(train_generator), steps_per_epoch, X_valid, y_valid, debug=debug).train()
-
 
 
 class TrainDataSource(object):
@@ -337,70 +346,67 @@ class LeNetSolver(object):
 
         history = {'train_loss': [], 'train_acc': [], 'valid_loss': [], 'valid_acc': []}
 
-        with tf.Session(graph=self.leNet.graph) as session:
-            session.run(tf.global_variables_initializer())
-            num_examples = self.steps_per_epoch * self.net_config.batch_size
-            train_dataset = np.ndarray([num_examples, self.net_config.W, self.net_config.H, self.net_config.C])
-            train_labels = np.ndarray([num_examples])
+        num_examples = self.steps_per_epoch * self.net_config.batch_size
+        train_dataset = np.ndarray([num_examples, self.net_config.W, self.net_config.H, self.net_config.C])
+        train_labels = np.ndarray([num_examples])
 
-            print("Training...")
-            print()
-            for i in range(self.net_config.num_epochs):
-                train_total_loss = 0.0
+        print("Training...")
+        print()
+        for i in range(self.net_config.num_epochs):
+            train_total_loss = 0.0
 
-                self.train_data_source.start_epoch()
+            self.train_data_source.start_epoch()
 
-                for s in range(self.steps_per_epoch):
-                    #print('Step: {0}'.format(s))
-                    batch_x, batch_y = self.train_data_source.next_batch(self.net_config.batch_size)
+            for s in range(self.steps_per_epoch):
+                #print('Step: {0}'.format(s))
+                batch_x, batch_y = self.train_data_source.next_batch(self.net_config.batch_size)
 
-                    start = s*self.net_config.batch_size
-                    end = start + self.net_config.batch_size
-                    train_dataset[start:end] = batch_x
-                    train_labels[start:end] = batch_y
+                start = s*self.net_config.batch_size
+                end = start + self.net_config.batch_size
+                train_dataset[start:end] = batch_x
+                train_labels[start:end] = batch_y
 
-                    feed_dict = {self.leNet.x: batch_x, self.leNet.y: batch_y,
-                                 self.leNet.dropout: self.net_config.dropout_prob,
-                                 self.leNet.is_training_mode: True,
-                                 self.leNet.lr_start: self.net_config.lr_start,
-                                 self.leNet.lr_decay_steps: self.net_config.lr_decay_steps,
-                                 self.leNet.lr_decay_rate: self.net_config.lr_decay_rate}
+                feed_dict = {self.leNet.x: batch_x, self.leNet.y: batch_y,
+                             self.leNet.dropout: self.net_config.dropout_prob,
+                             self.leNet.is_training_mode: True,
+                             self.leNet.lr_start: self.net_config.lr_start,
+                             self.leNet.lr_decay_steps: self.net_config.lr_decay_steps,
+                             self.leNet.lr_decay_rate: self.net_config.lr_decay_rate}
 
-                    _, loss_val = session.run([self.leNet.optimizer, self.leNet.loss], feed_dict=feed_dict)
-                    train_total_loss += (loss_val * len(batch_x))
+                _, loss_val = self.leNet.session.run([self.leNet.optimizer, self.leNet.loss], feed_dict=feed_dict)
+                train_total_loss += (loss_val * len(batch_x))
 
-                train_total_loss /= num_examples
+            train_total_loss /= num_examples
 
-                train_accuracy = self.leNet.evaluate(session, train_dataset, train_labels)
-                valid_accuracy = self.leNet.evaluate(session, self.valid_dataset, self.valid_labels)
-                valid_loss = self.leNet.eval_loss(session, self.valid_dataset, self.valid_labels)
+            train_accuracy = self.leNet.eval_accuracy(train_dataset, train_labels)
+            valid_accuracy = self.leNet.eval_accuracy(self.valid_dataset, self.valid_labels)
+            valid_loss = self.leNet.eval_loss(self.valid_dataset, self.valid_labels)
 
-                if self.debug:
-                    print("EPOCH {} ...".format(i + 1))
-                    #print("Minibatch Loss: %f" % loss_val)
-                    print("Train Loss: %f" % train_total_loss)
-                    print("Train Accuracy = {:.3f}".format(train_accuracy))
-                    print("Validation Loss = {:.3f}".format(valid_loss))
-                    print("Validation Accuracy = {:.3f}".format(valid_accuracy))
-                    print()
+            if self.debug:
+                print("EPOCH {} ...".format(i + 1))
+                print("Train Loss: %f" % train_total_loss)
+                print("Train Accuracy = {:.3f}".format(train_accuracy))
+                print("Validation Loss = {:.3f}".format(valid_loss))
+                print("Validation Accuracy = {:.3f}".format(valid_accuracy))
+                print()
 
-                # Keep track of the best model
-                if valid_accuracy > best_valid_accuracy:
-                    best_valid_loss = valid_loss
-                    best_valid_accuracy = valid_accuracy
-                    best_valid_weights = self.leNet.get_weights()
+            # Keep track of the best model
+            if valid_accuracy > best_valid_accuracy:
+                best_valid_loss = valid_loss
+                best_valid_accuracy = valid_accuracy
+                best_valid_weights = self.leNet.get_weights()
 
-                # store history
-                history['train_loss'].append(train_total_loss)
-                history['train_acc'].append(train_accuracy)
-                history['valid_loss'].append(valid_loss)
-                history['valid_acc'].append(valid_accuracy)
+            # store history
+            history['train_loss'].append(train_total_loss)
+            history['train_acc'].append(train_accuracy)
+            history['valid_loss'].append(valid_loss)
+            history['valid_acc'].append(valid_accuracy)
 
 
-            # Update weights of leNet with best values
-            self.leNet.load_weights(best_valid_weights)
+        # Update weights of leNet with best values
+        self.leNet.load_weights(best_valid_weights)
 
-            #if self.debug:
-            print("Best Valid Accuracy: {:.1f}% \n".format(best_valid_accuracy * 100))
+        #if self.debug:
+        print("Best Valid Accuracy: {:.1f}% \n".format(best_valid_accuracy * 100))
 
-            return (history, best_valid_loss, best_valid_accuracy)
+        return (history, best_valid_loss, best_valid_accuracy)
