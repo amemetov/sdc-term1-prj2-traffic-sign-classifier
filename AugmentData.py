@@ -1,3 +1,4 @@
+import math as m
 import numpy as np
 import skimage
 import skimage.transform as transform
@@ -18,6 +19,62 @@ class AugmentDataGenerator(object):
 
         for i in range(X.shape[0]):
             if np.random.random() <= self.augment_prob:
+                X_batch[i] = augment_image(X[i])
+            else:
+                X_batch[i] = X[i]
+
+        return X_batch, y
+
+
+class BalancedAugmentDataGenerator(object):
+    def __init__(self, X_origin, y_origin, num_classes, target_total_samples_num):
+        self.X_origin = X_origin
+        self.y_origin = y_origin
+        self.num_classes = num_classes
+        self._init_probs(X_origin, y_origin, num_classes, target_total_samples_num)
+
+    def _init_probs(self, X, y, num_classes, target_total_samples_num):
+        num_origin_total_samples = y.size
+
+        # Probabilities for each sample to be chosen in the next_batch method
+        self.choice_probs = np.zeros(num_origin_total_samples)
+
+        # Probabilities for each class to be augmented in the next_batch method
+        self.augment_probs = []
+
+        num_target_samples_per_class = int(m.ceil(target_total_samples_num / num_classes))
+        num_overflow_samples = 0
+
+        class_choice_prob = 1.0/num_classes
+
+        for c in range(num_classes):
+            indices_class_items = (y == c)
+            num_class_samples = y[indices_class_items].size
+
+            if num_class_samples > num_target_samples_per_class:
+                num_overflow_samples += num_classes - num_target_samples_per_class
+
+            class_choice_prob_per_item = class_choice_prob/num_class_samples
+            self.choice_probs[indices_class_items] = class_choice_prob_per_item
+
+            augment_prob = 0
+            if num_class_samples < num_target_samples_per_class:
+                num_of_augment = num_target_samples_per_class - num_class_samples
+                augment_prob = num_of_augment / num_target_samples_per_class
+            self.augment_probs.append(augment_prob)
+
+        #print(np.sum(self.choice_probs))
+        self.target_total_samples_num = target_total_samples_num + num_overflow_samples
+
+    def next_batch(self, batch_size):
+        choice_ind = np.random.choice(self.X_origin.shape[0], batch_size, p=self.choice_probs)
+        X = self.X_origin[choice_ind]
+        y = self.y_origin[choice_ind]
+
+        X_batch = np.ndarray(X.shape)
+
+        for i in range(X.shape[0]):
+            if np.random.random() <= self.augment_probs[y[i]]:
                 X_batch[i] = augment_image(X[i])
             else:
                 X_batch[i] = X[i]
