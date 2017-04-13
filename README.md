@@ -190,7 +190,7 @@ For example after that I used L2 regularization = 1e-3 and dropout = 0.5 - it in
 
 Also RandomSearch allowed to notice that good value for number of hidden units of FullyConnected Layers is 256.
 
-Then I decided to change with Convolutional Layers.
+Then I decided to work on Convolutional Layers.
 
 The first result improvement was noticed when I added additional ConvLayer(+RELU+MAX_POOL).
 
@@ -227,8 +227,9 @@ The code for making predictions on my final model is located in the cell #26 of 
 Here are the results of the prediction:
 <img src="report/web-predictions.png">
 
-| Real Classes:	    | [ 1 12 13 15 17 25 31 33 36  **2** 14 **25**] |
-| Predicted Classes:| [ 1 12 13 15 17 25 31 33 36  **4** 14 **22**] |
+Real Classes:	    [ 1 12 13 15 17 25 31 33 36  **2** 14 **25**]
+
+Predicted Classes:  [ 1 12 13 15 17 25 31 33 36  **4** 14 **22**]
 
 The model was able to correctly guess 10 of the 12 traffic signs, which gives an accuracy of 83.3%. 
 
