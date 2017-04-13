@@ -39,6 +39,7 @@ so using these 2 charts we can see that both datasets are not balanced.
 
 <img src="report/balance-chart-train.png" alt="Train Dataset Distribution" />
 <img src="report/balance-chart-valid.png" alt="Valid Dataset Distribution" />
+![Train Dataset Distribution][report/balance-chart-train.png]
 
 ---
 
