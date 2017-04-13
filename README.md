@@ -90,20 +90,21 @@ The structure of the Dataset:
 | Test			| 12630						| -				 |
 
 Number of samples by categories for the Augment Dataset is presented at below charts:
-<img src="report/balance-chart-aug-train.png" alt="Train Dataset Distribution" />
-<img src="report/balance-chart-aug-valid.png" alt="Valid Dataset Distribution" />
+![Augment Train Dataset Distribution](report/balance-chart-aug-train.png)
+![Augment Valid Dataset Distribution](report/balance-chart-aug-valid.png)
+
 
 
 The examples of augmented images:
 
-| Transformation type	  | Result Image 					|
-|:-----------------------:|:---------------------------------------------------:|
-| Rotation	  	  | <img src="report/aug-rotate-sample.png" />		|
-| Rotation and Zoom-out	  | <img src="report/aug-rotate-zoomout-sample.png" />	|
-| Shearing	  	  | <img src="report/aug-shear-sample.png" />		|
-| Shearing and Zoom-out	  | <img src="report/aug-shear-zoomout-sample.png" />	|
-| Zoom-in	  	  | <img src="report/aug-zoomin-sample.png" />		|
-| Zoom-out	  	  | <img src="report/aug-zoomout-sample.png" />		|
+| Transformation type	  | Result Image 							|
+|:-----------------------:|:-------------------------------------------------------------------:|
+| Rotation	  	  | ![Rotation](report/aug-rotate-sample.png)				|
+| Rotation and Zoom-out	  | ![Rotation and Zoom-out](report/aug-rotate-zoomout-sample.png)	|
+| Shearing	  	  | ![Shearing](report/aug-shear-sample.png)>				|
+| Shearing and Zoom-out	  | ![Shearing and Zoom-out](report/aug-shear-zoomout-sample.png)	|
+| Zoom-in	  	  | ![Zoom-in](report/aug-zoomin-sample.png)				|
+| Zoom-out	  	  | ![Zoom-out](report/aug-zoomout-sample.png)				|
 
 
 Also I implemented Keras like ImageDataGenerator for generating the Augment Dataset on the fly 
@@ -214,10 +215,10 @@ My final model results were (see cells #47, #48, #49):
 #### 1. Choosing 12 German traffic signs found on the web.
 
 I have found 12 German traffic signs on the web, 4 of them might be difficult to classify because of noises on them (leafes, snow):
-* <img src="data/web/31-wild-animals-crossing-1.png" />
-* <img src="data/web/02-speed-limit-50-snow-1.png" />
-* <img src="data/web/14-stop-snow-1.png" />
-* <img src="data/web/25-road-work-snow-2.png" />
+* ![Wild Animal Crossing](data/web/31-wild-animals-crossing-1.png)
+* ![Speed Limit 50](data/web/02-speed-limit-50-snow-1.png)
+* ![Stop](data/web/14-stop-snow-1.png)
+* ![Road Work](data/web/25-road-work-snow-2.png)
 
 For other images my Model should give good results.
 
@@ -225,7 +226,7 @@ For other images my Model should give good results.
 The code for making predictions on my final model is located in the cell #26 of the Ipython notebook.
 
 Here are the results of the prediction:
-<img src="report/web-predictions.png">
+![Predictions result](report/web-predictions.png)
 
 Real Classes:	    [ 1 12 13 15 17 25 31 33 36  **2** 14 **25**]
 
@@ -234,12 +235,12 @@ Predicted Classes:  [ 1 12 13 15 17 25 31 33 36  **4** 14 **22**]
 The model was able to correctly guess 10 of the 12 traffic signs, which gives an accuracy of 83.3%. 
 
 As I expected 2 noisy images are predicted incorrectly:
-* <img src="data/web/02-speed-limit-50-snow-1.png" /> - predicted as Speed Limit 70
-* <img src="data/web/25-road-work-snow-2.png" /> - predicted as Bumpy Road.
+* ![Speed Limit 50](data/web/02-speed-limit-50-snow-1.png) - predicted as Speed Limit 70
+* ![Road Work](data/web/25-road-work-snow-2.png) - predicted as Bumpy Road.
 
 For both cases we see that predicted signs are very similar to origin ones:
-* <img src="report/web-prediction-speed-limit-50.png" />
-* <img src="report/web-prediction-road-work.png" />
+* ![Speed Limit 50 predictions](report/web-prediction-speed-limit-50.png)
+* ![Road Work predictions](report/web-prediction-road-work.png)
 
 
 #### 3. How certain the model is when predicting on each of the five new images by looking at the softmax probabilities for each prediction
@@ -247,7 +248,7 @@ For both cases we see that predicted signs are very similar to origin ones:
 Softmax probabilities were output in the cell #44. 
 
 We can see barchart which shows predicted probabilities for web images:
-<img src="report/web-probs.png" />
+![Prediction Probabilities Bar Charts](report/web-probs.png)
 
 We see that for all images, except 2 wrong predicted images, the probability of first prediction is almost 1.0.
 
