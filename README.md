@@ -37,9 +37,8 @@ The code cell #6 contains the list of all categories with 5 randomly selected im
 The code cell #8 contains 2 bar charts (for train and valid datasets) showing how many samples presented for each category,
 so using these 2 charts we can see that both datasets are not balanced.
 
-<img src="report/balance-chart-train.png" alt="Train Dataset Distribution" />
-<img src="report/balance-chart-valid.png" alt="Valid Dataset Distribution" />
-![Train Dataset Distribution][report/balance-chart-train.png]
+![Train Dataset Distribution](report/balance-chart-train.png)
+![Valid Dataset Distribution](report/balance-chart-valid.png)
 
 ---
 
