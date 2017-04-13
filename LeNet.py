@@ -40,7 +40,6 @@ class LeNetConfig(object):
         self.sigma = params['sigma'] if 'sigma' in params else 0.1
 
         self.batch_size = params['batch_size'] if 'batch_size' in params else 128
-        self.num_epochs = params['num_epochs'] if 'num_epochs' in params else 5
 
         self.lr_start = params['lr_start'] if 'lr_start' in params else 1e-3
         self.lr_decay_steps = params['lr_decay_steps'] if 'lr_decay_steps' in params else 100000
@@ -167,6 +166,8 @@ class LeNet(object):
             tf_conv = tf.add(tf.nn.conv2d(conv_input, self.weights[i],
                                           strides=[1, conv[i]['stride'], conv[i]['stride'], 1],
                                           padding='VALID'), self.biases[i], name='conv_{0}'.format(i+1))
+            if self.net_config.use_bn:
+                tf_conv = tf.contrib.layers.batch_norm(tf_conv, center=True, scale=True, is_training=self.is_training_mode)
             tf_relu = tf.nn.relu(tf_conv, name='conv_{0}_relu'.format(i+1))
             if conv[i]['pool_size'] > 0:
                 tf_pool = tf.nn.max_pool(tf_relu, ksize=[1, conv[i]['pool_size'], conv[i]['pool_size'], 1],
@@ -174,7 +175,7 @@ class LeNet(object):
                                          padding='VALID', name='conv_{0}_pool'.format(i+1))
                 conv_input = tf_pool
             else:
-                conv_input = tf_relu
+                conv_input = tf_relu                                                
 
         # Flatten
         fc0 = flatten(conv_input)
@@ -250,9 +251,11 @@ class LeNet(object):
 
     def save(self, save_path):
         self.saver.save(sess=self.session, save_path=save_path)
+        print('Model Saved')
 
     def restore(self, save_path):
         self.saver.restore(sess=self.session, save_path=save_path)
+        print('Model Restored')
 
     def load_weights(self, weights):
         self._build_graph(self.net_config, weights)
@@ -285,18 +288,27 @@ class LeNet(object):
         return self.session.run(self.predict, feed_dict={self.x: X, self.dropout: 1.0, self.is_training_mode: False})
 
     def predict_probabilities(self, X):
-        return self.session.run(self.logits, feed_dict={self.x: X, self.dropout: 1.0, self.is_training_mode: False})
+        softmax_logits = tf.nn.softmax(self.logits)
+        return self.session.run(softmax_logits, feed_dict={self.x: X, self.dropout: 1.0, self.is_training_mode: False})
+
+    def top_k_probabilities(self, X, k):
+        softmax_logits = tf.nn.softmax(self.logits)
+        top_k = tf.nn.top_k(softmax_logits, k=k)
+        return self.session.run(top_k, feed_dict={self.x: X, self.dropout: 1.0, self.is_training_mode: False})
 
     def activation(self, image, var_name):
         tf_activation = self.graph.get_tensor_by_name(var_name + ":0")
+        #print(tf_activation)
         return tf_activation.eval(session=self.session, feed_dict={self.x: np.array(image), self.dropout: 1.0, self.is_training_mode: False})
 
-    def fit(self, X_train, y_train, X_valid, y_valid, debug=True):
-        steps_per_epoch = int(len(X_train) / self.net_config.batch_size)
-        return LeNetSolver(self, TrainDataSource(X_train, y_train), steps_per_epoch, X_valid, y_valid, debug=debug).train()
 
-    def fit_generator(self, train_generator, steps_per_epoch, X_valid, y_valid, debug=True):
-        return LeNetSolver(self, TrainAugmentDataSource(train_generator), steps_per_epoch, X_valid, y_valid, debug=debug).train()
+
+    def fit(self, X_train, y_train, X_valid, y_valid, num_epochs = 10, debug=True):
+        steps_per_epoch = int(len(X_train) / self.net_config.batch_size)
+        return LeNetSolver(self, TrainDataSource(X_train, y_train), X_valid, y_valid, steps_per_epoch, num_epochs, debug=debug).train()
+
+    def fit_generator(self, train_generator, X_valid, y_valid, steps_per_epoch, num_epochs = 10, debug=True):
+        return LeNetSolver(self, TrainAugmentDataSource(train_generator), X_valid, y_valid, steps_per_epoch, num_epochs, debug=debug).train()
 
 
 class TrainDataSource(object):
@@ -328,13 +340,14 @@ class TrainAugmentDataSource(object):
 
 
 class LeNetSolver(object):
-    def __init__(self, leNet, train_data_source, steps_per_epoch, valid_dataset, valid_labels, debug=True):
+    def __init__(self, leNet, train_data_source, valid_dataset, valid_labels, steps_per_epoch, num_epochs, debug=True):
         self.leNet = leNet
         self.net_config = leNet.net_config
         self.train_data_source = train_data_source
-        self.steps_per_epoch = steps_per_epoch
         self.valid_dataset = valid_dataset
         self.valid_labels = valid_labels
+        self.steps_per_epoch = steps_per_epoch
+        self.num_epochs = num_epochs
 
         self.debug = debug
 
@@ -352,16 +365,16 @@ class LeNetSolver(object):
 
         print("Training...")
         print()
-        for i in range(self.net_config.num_epochs):
+        for i in range(self.num_epochs):
             train_total_loss = 0.0
 
             self.train_data_source.start_epoch()
 
-            for s in range(self.steps_per_epoch):
-                #print('Step: {0}'.format(s))
+            for step in range(self.steps_per_epoch):
+                #print('Step: {0}'.format(step))
                 batch_x, batch_y = self.train_data_source.next_batch(self.net_config.batch_size)
 
-                start = s*self.net_config.batch_size
+                start = step*self.net_config.batch_size
                 end = start + self.net_config.batch_size
                 train_dataset[start:end] = batch_x
                 train_labels[start:end] = batch_y

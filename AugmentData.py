@@ -18,7 +18,7 @@ class AugmentDataGenerator(object):
         X_batch = np.ndarray(X.shape)
 
         for i in range(X.shape[0]):
-            if np.random.random() <= self.augment_prob:
+            if np.random.random() < self.augment_prob:
                 X_batch[i] = augment_image(X[i])
             else:
                 X_batch[i] = X[i]
@@ -83,12 +83,11 @@ class BalancedAugmentDataGenerator(object):
 
 
 def make_noisy_image(image):
-    #noisy = image + 10 * np.random.random(image.shape)
-    #return noisy.astype(np.uint8)
-    #modes = ['gaussian', 'localvar', 'poisson', 'salt', 'pepper', 's&p', 'speckle']
-    modes = ['poisson', 'speckle']
-    mode = modes[np.random.randint(0, len(modes))]
-    return skimage.util.random_noise(image, mode=mode)
+    noisy = image + 0.01 * np.random.random(image.shape)
+    return noisy
+    # modes = ['gaussian', 'localvar', 'poisson', 'salt', 'pepper', 's&p', 'speckle']
+    # mode = modes[np.random.randint(0, len(modes))]
+    # return skimage.util.random_noise(image, mode=mode)
 
 def zoom_out_image(image):
     scale = np.random.uniform(low=0.5, high=0.9)
@@ -115,16 +114,18 @@ def rotate_image(image):
 
 def shift_image(image):
     shift_val = np.random.randint(-5, 5)
-    return np.roll(image, [shift_val, shift_val, shift_val])
+    return transform.warp(image, transform.AffineTransform(translation=shift_val))
 
+def shear_image(image):
+    shear_angle = np.random.randint(-15, 15)
+    return transform.warp(image, transform.AffineTransform(shear=m.radians(shear_angle)))
 
 def augment_image(image, combine_prob=0.5):
-    # methods = [make_noisy_image, zoom_out_image, zoom_in_image, rotate_image, shift_image]
-    methods = [zoom_out_image, zoom_in_image, rotate_image, shift_image]
+    methods = [make_noisy_image, zoom_out_image, zoom_in_image, rotate_image, shift_image, shear_image]
     method = methods[np.random.randint(0, len(methods))]
     image = method(image)
     # combine augment methods
-    if np.random.random() <= combine_prob:
+    if np.random.random() < combine_prob:
         # decrease combine_prob
         return augment_image(image, combine_prob=combine_prob-0.25)
     else:
@@ -134,7 +135,7 @@ def augment_image(image, combine_prob=0.5):
 def augment_data(X, y, n_classes, target_total_samples_count):
     # Balance data by adding augment samples
 
-    target_items_per_class = int(target_total_samples_count / n_classes) + 1
+    target_items_per_class = int(m.ceil(target_total_samples_count / n_classes))
     overflow_items_num = 0
 
     # Group by class
@@ -159,7 +160,7 @@ def augment_data(X, y, n_classes, target_total_samples_count):
         if items_per_class < target_items_per_class:
             num_augment_items = target_items_per_class - items_per_class
             print("--- Need to add {0} augment samples ---".format(num_augment_items))
-            images = X_by_class[0][np.random.choice(X_by_class[0].shape[0], num_augment_items)]
+            images = X_by_class[c][np.random.choice(items_per_class, num_augment_items)]
             for image in images:
                 if result_idx >= target_total_samples_count:
                     break
