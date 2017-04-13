@@ -82,6 +82,7 @@ I augmented the Origin Dataset in a way that each category should have at least 
 Using Augment Dataset allows to build more robust NN, cause such NN trains on more data and data have different transformations.
 
 The structure of the Dataset:
+
 | Dataset         	|     # of Samples in Origin Dataset   		| # of Sample in Augment Dataset |
 |---------------------- |-----------------------------------------------|--------------------------------| 
 | Train         	| 34799						| 51690				 |
@@ -92,7 +93,9 @@ Number of samples by categories for the Augment Dataset is presented at below ch
 <img src="report/balance-chart-aug-train.png" alt="Train Dataset Distribution" />
 <img src="report/balance-chart-aug-valid.png" alt="Valid Dataset Distribution" />
 
+
 The examples of augmented images:
+
 | Transformation type	  | Result Image 					|
 |:-----------------------:|:---------------------------------------------------:|
 | Rotation	  	  | <img src="report/aug-rotate-sample.png" />		|
@@ -105,16 +108,17 @@ The examples of augmented images:
 
 Also I implemented Keras like ImageDataGenerator for generating the Augment Dataset on the fly 
 (see AugmentDataGenerator and BalancedAugmentDataGenerator in [AugmentData.py](AugmentData.py)),
+
 it works, but requires more execution time at training process, so I decided to prepare the Augment Dataset at once, store it on disk and reuse it.
 
 
 #### 3. Final model architecture
 
-looks like including model type, layers, layer sizes, connectivity, etc.) Consider including a diagram and/or table describing the final model.
-
 Finding a good model requires trying many different architectures.
+
 To facilitate this process I have created class LeNet in the file [LeNet.py](LeNet.py) which allows 
 to create, configure, train, save, restore, evaluate accuracies, etc. model described by LeNetConfig class (is placed in the same [LeNet.py](LeNet.py) file too)
+
 This approach saved my a lot of time, cause for changing model I needed just point in my config dictionary a new model's settings.
 
 For example my Final model is described in the code (cell #22) as:
@@ -157,7 +161,9 @@ So it means, that the Final model consisted of the following layers:
  
 
 #### 4. Training the model
+
 The code for training the model is located in the class LeNetSolver (the file [LeNet.py](LeNet.py))
+
 To train the model, I used:
 * AdamOptimizer is used
 * batch size is selected equal to 64 to fit into a memory (for example 128 is not fit for the Final Model into my GPU memory).
@@ -166,18 +172,26 @@ To train the model, I used:
 * L2 regularization is equal to 1e-3
 * Dropout value is equalt to 0.25
 
+
 #### 5. The approach taken for finding a solution. 
 I started from LeNet-5 architecture described in the lection.
+
 It gave valid_accuracy about 91%.
 
 To find good values for hyperparameters I implemented RandomSearch (see file [RandomSearch.py](RandomSearch.py))
+
 It's the simple implementation of ideas described [here](http://www.jmlr.org/papers/volume13/bergstra12a/bergstra12a.pdf)
+
 Due to changes made in the my NN API, currently RandomSearch does not work.
+
 But earlier it allowed to get some info about what values of hyperparameters give better validation accuracy.
+
 For example after that I used L2 regularization = 1e-3 and dropout = 0.5 - it increased valid_accuracy up to 93%.
+
 Also RandomSearch allowed to notice that good value for number of hidden units of FullyConnected Layers is 256.
 
 Then I decided to change with Convolutional Layers.
+
 The first result improvement was noticed when I added additional ConvLayer(+RELU+MAX_POOL).
 
 The next improvements was achieved by:
@@ -193,7 +207,7 @@ My final model results were (see cells #47, #48, #49):
 * validation set accuracy of 98.5% 
 * test set accuracy of 98.1%
 
- 
+--- 
 
 ### Test a Model on New Images
 
@@ -213,10 +227,11 @@ The code for making predictions on my final model is located in the cell #26 of 
 Here are the results of the prediction:
 <img src="report/web-predictions.png">
 
-Real Classes:      [ 1 12 13 15 17 25 31 33 36  **2** 14 **25**]
-Predicted Classes: [ 1 12 13 15 17 25 31 33 36  **4** 14 **22**]
+| Real Classes:	    | [ 1 12 13 15 17 25 31 33 36  **2** 14 **25**] |
+| Predicted Classes:| [ 1 12 13 15 17 25 31 33 36  **4** 14 **22**] |
 
 The model was able to correctly guess 10 of the 12 traffic signs, which gives an accuracy of 83.3%. 
+
 As I expected from 2 images are predicted incorrectly:
 * <img src="data/web/02-speed-limit-50-snow-1.png" /> - predicted as Speed Limit 70
 * <img src="data/web/25-road-work-snow-2.png" /> - predicted as Bumpy Road.
@@ -227,17 +242,21 @@ For both cases we see that predicted types are very similar to origin types:
 
 
 #### 3. How certain the model is when predicting on each of the five new images by looking at the softmax probabilities for each prediction
+
 Softmax probabilities were output in the cell #44. 
 
 We can see barchart which shows predicted probabilities for web images:
 <img src="report/web-probs.png" />
 
 We see that for all images, except 2 wrong predicted images, the probability of first prediction is almost 1.0.
+
+
 Let's see the probabilities for wrong cases:
 
-
 For the Speed Limit 50, the model is relatively sure that this is a Speed Limit 70 sign (probability of 0.883). 
+
 The probability for Speed Limit 50 is just 0.029.
+
 The top five soft max probabilities were
 
 | Probability         	|     Prediction	        		| 
@@ -249,5 +268,6 @@ The top five soft max probabilities were
 | .009			| Dangerous curve to the left			|
 
 
-For the Road Work, the model is almost absolutely sure that it is Bump Road sign - 0.999987960.
+For the Road Work, the model is almost absolutely sure that it is Bump Road sign is 0.999987960.
+
 The probability for Road Work is only 6.75739830e-06.
