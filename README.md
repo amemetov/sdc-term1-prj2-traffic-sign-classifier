@@ -233,11 +233,11 @@ Predicted Classes:  [ 1 12 13 15 17 25 31 33 36  **4** 14 **22**]
 
 The model was able to correctly guess 10 of the 12 traffic signs, which gives an accuracy of 83.3%. 
 
-As I expected from 2 images are predicted incorrectly:
+As I expected 2 noisy images are predicted incorrectly:
 * <img src="data/web/02-speed-limit-50-snow-1.png" /> - predicted as Speed Limit 70
 * <img src="data/web/25-road-work-snow-2.png" /> - predicted as Bumpy Road.
 
-For both cases we see that predicted types are very similar to origin types:
+For both cases we see that predicted signs are very similar to origin ones:
 * <img src="report/web-prediction-speed-limit-50.png" />
 * <img src="report/web-prediction-road-work.png" />
 
