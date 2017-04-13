@@ -39,7 +39,8 @@ so using these 2 charts we can see that both datasets are not balanced.
 
 <img src="report/balance-chart-train.png" alt="Train Dataset Distribution" />
 <img src="report/balance-chart-valid.png" alt="Valid Dataset Distribution" />
------
+
+---
 
 ### Design and Test a Model Architecture
 
@@ -71,14 +72,18 @@ Zero-centering and normalization speed up training process.
 #### 2. Set up training, validation and testing data.
 
 As I mentioned above the Origin Dataset was not balanced. 
+
 To partially balance Test/Valid datasets I implemented method *augment_data* (see in file [AugmentData.py](AugmentData.py) ).
+
 The method augments dataset by randomly selected transformations (make_noisy_image, zoom_out_image, zoom_in_image, rotate_image, shift_image, shear_image).
+
 I augmented the Origin Dataset in a way that each category should have at least 1000 samples.
+
 Using Augment Dataset allows to build more robust NN, cause such NN trains on more data and data have different transformations.
 
 The structure of the Dataset:
 | Dataset         	|     # of Samples in Origin Dataset   		| # of Sample in Augment Dataset |
-|:---------------------:|:---------------------------------------------:|:------------------------------:| 
+|---------------------- |-----------------------------------------------|--------------------------------| 
 | Train         	| 34799						| 51690				 |
 | Valid			| 4410						| 5630				 |
 | Test			| 12630						| -				 |
@@ -93,6 +98,7 @@ The examples of augmented images:
 | Rotation	  	  | <img src="report/aug-rotate-sample.png" />		|
 | Rotation and Zoom-out	  | <img src="report/aug-rotate-zoomout-sample.png" />	|
 | Shearing	  	  | <img src="report/aug-shear-sample.png" />		|
+| Shearing and Zoom-out	  | <img src="report/aug-shear-zoomout-sample.png" />	|
 | Zoom-in	  	  | <img src="report/aug-zoomin-sample.png" />		|
 | Zoom-out	  	  | <img src="report/aug-zoomout-sample.png" />		|
 
